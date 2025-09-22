@@ -4,20 +4,15 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 
-// Base URLs
+// --- CONFIG ---
 const BASE_URL = "https://moe.mohkg1017.pro/";
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
-
-// Folder to download IPAs
 const IPA_DIR = path.resolve(__dirname, "ipas");
-
-// Max simultaneous downloads
-const MAX_PARALLEL = 3;
-
-// Max retries per download
+const MAX_PARALLEL = 5; // increased concurrency
 const MAX_RETRIES = 3;
+const FAILED_LOG = path.resolve(__dirname, "failedDownloads.json");
 
-// Convert size string to bytes
+// --- UTILS ---
 function sizeToBytes(sizeStr) {
   if (!sizeStr) return 0;
   const match = sizeStr.trim().match(/([\d.]+)\s*(MB|GB|KB)/i);
@@ -32,34 +27,32 @@ function sizeToBytes(sizeStr) {
   }
 }
 
-// Decode HTML entities in URL
 function decodeHtmlEntities(str) {
   if (!str) return str;
   return str.replace(/&amp;/g, "&");
 }
 
-// Extract Google Drive direct download link
 function googleDriveDirectLink(url) {
   if (!url) return url;
   url = decodeHtmlEntities(url);
-
-  // Handle /file/d/ID or ?id=ID formats
   const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)/);
   const fileId = fileIdMatch?.[1] || fileIdMatch?.[2];
   if (!fileId) return url;
-
   return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
-// Download file with retries and Google Drive handling
+// --- DOWNLOAD ---
 async function downloadFile(url, targetPath) {
+  if (fs.existsSync(targetPath) && fs.statSync(targetPath).size > 0) {
+    console.log(`Skipping already downloaded: ${path.basename(targetPath)}`);
+    return;
+  }
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       await new Promise((resolve, reject) => {
         const file = fs.createWriteStream(targetPath);
-
         https.get(url, (res) => {
-          // Google Drive large file confirmation page
           if (res.statusCode === 200 && res.headers["content-type"]?.includes("text/html")) {
             let body = "";
             res.on("data", chunk => body += chunk.toString());
@@ -68,10 +61,10 @@ async function downloadFile(url, targetPath) {
               if (confirmMatch) {
                 const confirmToken = confirmMatch[1];
                 const newUrl = url.replace("export=download", `export=download&confirm=${confirmToken}`);
-                console.log("Detected Google Drive confirmation, retrying with confirm token...");
+                console.log(`Detected Google Drive confirmation for ${path.basename(targetPath)}, retrying...`);
                 resolve(downloadFile(newUrl, targetPath));
               } else if (body.includes("quota exceeded")) {
-                reject(new Error("Google Drive requires manual confirmation or quota exceeded"));
+                reject(new Error("Google Drive quota exceeded"));
               } else {
                 reject(new Error(`Unexpected HTML response for ${url}`));
               }
@@ -85,24 +78,21 @@ async function downloadFile(url, targetPath) {
           }
 
           res.pipe(file);
-          file.on("finish", () => {
-            file.close(resolve);
-          });
-        }).on("error", (err) => {
+          file.on("finish", () => file.close(resolve));
+        }).on("error", err => {
           fs.unlink(targetPath, () => {});
           reject(err);
         });
       });
-
       return; // success
     } catch (err) {
-      console.warn(`Retrying download for ${url} (${attempt}/${MAX_RETRIES})`);
+      console.warn(`Retry ${attempt}/${MAX_RETRIES} failed for ${path.basename(targetPath)}: ${err.message}`);
       if (attempt === MAX_RETRIES) throw err;
     }
   }
 }
 
-// Utility to run promises in parallel with limit
+// --- PARALLEL LIMIT ---
 async function parallelLimit(items, limit, fn) {
   const results = [];
   const executing = [];
@@ -110,8 +100,8 @@ async function parallelLimit(items, limit, fn) {
   for (const item of items) {
     const p = fn(item);
     results.push(p);
-
     executing.push(p);
+
     if (executing.length >= limit) {
       await Promise.race(executing).catch(() => {});
       executing.splice(executing.findIndex(e => e === p), 1);
@@ -121,9 +111,11 @@ async function parallelLimit(items, limit, fn) {
   return Promise.all(results);
 }
 
+// --- MAIN SCRAPER ---
 async function scrape() {
   try {
     if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
+    let failedDownloads = [];
 
     // Fetch Moe site
     const { data: html } = await axios.get(BASE_URL);
@@ -167,7 +159,6 @@ async function scrape() {
     });
 
     const apps = [];
-    const failedDownloads = [];
 
     await parallelLimit(appsToDownload, MAX_PARALLEL, async (app) => {
       try {
@@ -195,8 +186,8 @@ async function scrape() {
     fs.writeFileSync("repo.feather.json", JSON.stringify({ name: "Moes IPA Mirror", identifier: "com.dwojc6.moesipamirror", apps }, null, 2));
 
     if (failedDownloads.length > 0) {
-      fs.writeFileSync("failedDownloads.json", JSON.stringify(failedDownloads, null, 2));
-      console.log(`⚠️ Some downloads failed. See failedDownloads.json`);
+      fs.writeFileSync(FAILED_LOG, JSON.stringify(failedDownloads, null, 2));
+      console.log(`⚠️ Some downloads failed. See ${FAILED_LOG}`);
     }
 
     console.log(`✅ repo.feather.json generated with ${apps.length} apps`);
