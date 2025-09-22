@@ -1,12 +1,17 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 const fs = require("fs");
+const path = require("path");
+const https = require("https");
 
 // Base URL for Moe's site
 const BASE_URL = "https://moe.mohkg1017.pro/";
 
 // Feather repo lookup URL
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
+
+// Folder to download IPAs to
+const IPA_DIR = path.resolve(__dirname, "ipas");
 
 // Convert size string like "250 MB" or "1.2 GB" to bytes
 function sizeToBytes(sizeStr) {
@@ -29,19 +34,38 @@ function decodeHtmlEntities(str) {
   return str.replace(/&amp;/g, "&");
 }
 
-// Convert Google Drive link to direct download
+// Convert Google Drive link to download link (we still download manually)
 function googleDriveDirectLink(url) {
   if (!url) return url;
-  url = decodeHtmlEntities(url); // decode first
-  const match = url.match(/id=([\w-]+)/);
-  if (match) {
-    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
-  }
+  url = decodeHtmlEntities(url);
   return url;
+}
+
+// Download file from URL to target path
+function downloadFile(url, targetPath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(targetPath);
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`Failed to download ${url}: ${res.statusCode}`));
+        return;
+      }
+      res.pipe(file);
+      file.on("finish", () => {
+        file.close(resolve);
+      });
+    }).on("error", (err) => {
+      fs.unlink(targetPath, () => {});
+      reject(err);
+    });
+  });
 }
 
 async function scrape() {
   try {
+    // Ensure IPA directory exists
+    if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
+
     // 1️⃣ Fetch Moe site
     const { data: html } = await axios.get(BASE_URL);
     const $ = cheerio.load(html);
@@ -59,7 +83,9 @@ async function scrape() {
     const apps = [];
 
     // 3️⃣ Scrape Moe's apps
-    $(".app-card").each((_, el) => {
+    const appCards = $(".app-card").toArray();
+
+    for (const el of appCards) {
       const name = $(el).data("name")?.toString().trim() || "Unknown App";
       const versionDate = $(el).data("updated")?.toString().trim() || new Date().toISOString().split("T")[0];
 
@@ -71,12 +97,26 @@ async function scrape() {
       let downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
       downloadURL = googleDriveDirectLink(downloadURL);
 
-      // Lookup bundleIdentifier & iconURL from Feather repo
+      // Lookup bundleIdentifier & iconURL
       const lookup = lookupMap[name.toLowerCase()] || {};
       const bundleIdentifier = lookup.bundleIdentifier || `com.moes.${name.toLowerCase().replace(/[^a-z0-9]/gi, "")}`;
       const iconURL = lookup.iconURL || `${BASE_URL}${$(el).find(".app-icon img").attr("src")?.replace(/^\//, "") || "placeholder.png"}`;
 
       const description = $(el).find(".app-description").text().trim() || "No description provided.";
+
+      // Save IPA locally
+      const safeName = name.replace(/[^a-z0-9\-_.]/gi, "_");
+      const ipaPath = path.join(IPA_DIR, `${safeName}.ipa`);
+      try {
+        console.log(`Downloading ${name} from ${downloadURL}...`);
+        await downloadFile(downloadURL, ipaPath);
+        console.log(`Downloaded to ${ipaPath}`);
+      } catch (err) {
+        console.warn(`Failed to download ${name}: ${err.message}`);
+      }
+
+      // Set downloadURL for GitHub Releases (Action will upload)
+      const ghDownloadURL = `https://github.com/<USERNAME>/<REPO>/releases/download/<TAG>/${safeName}.ipa`;
 
       apps.push({
         name,
@@ -86,11 +126,12 @@ async function scrape() {
         versionDate,
         localizedDescription: description,
         iconURL,
-        downloadURL,
+        downloadURL: ghDownloadURL,
         size
       });
-    });
+    }
 
+    // 4️⃣ Write Feather JSON
     const repo = {
       name: "Moes IPA Mirror",
       identifier: "com.dwojc6.moesipamirror",
