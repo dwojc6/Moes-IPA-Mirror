@@ -20,21 +20,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install gdown
-        run: python3 -m pip install --upgrade gdown
-
       - name: Run scraper
         run: node scrape.js
 
       - name: List downloaded IPAs
-        run: ls -l ipas/
+        run: ls -lh ipas/ || echo "No IPAs found"
 
       # GitHub Releases step
       - name: Create or update release and upload IPAs
         uses: softprops/action-gh-release@v1
         with:
           files: "ipas/*.ipa"
-          # Optional: tag can be dynamic per run (e.g., version/date)
           tag_name: "latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
