@@ -1,41 +1,45 @@
-name: Update Feather Repo
+name: Scrape Moe & Publish IPAs
 
 on:
+  workflow_dispatch:   # manual trigger
   schedule:
-    - cron: '0 */6 * * *' # every 6 hours
-  workflow_dispatch:     # manual trigger from Actions tab
+    - cron: "0 3 * * *"  # optional daily at 3am UTC
 
 jobs:
-  build:
+  scrape-and-release:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install dependencies
         run: npm install
 
       - name: Run scraper
-        run: npm run scrape
+        run: node scrape.js
 
-      - name: Commit and push if changed
+      # GitHub Releases step
+      - name: Create or update release and upload IPAs
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "ipas/*.ipa"
+          # Optional: tag can be dynamic per run (e.g., version/date)
+          tag_name: "latest"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit updated repo.feather.json
+      - name: Commit updated Feather JSON
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add repo.feather.json
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update repo.feather.json"
-            git push "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
-          fi
+          git commit -m "Update repo.feather.json [skip ci]" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
