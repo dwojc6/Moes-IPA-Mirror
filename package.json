@@ -1,0 +1,12 @@
+{
+  "name": "moe-feather-repo-scraper",
+  "version": "1.0.0",
+  "description": "Scrapes moe.mohkg1017.pro and generates repo.feather.json",
+  "main": "scrape.js",
+  "scripts": {
+    "scrape": "node scrape.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12"
+  }
+}
