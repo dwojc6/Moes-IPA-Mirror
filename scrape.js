@@ -3,14 +3,11 @@ const cheerio = require("cheerio");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const { URL } = require("url");
+const pLimit = require("p-limit");
 
-// Base URL for Moe's site
 const BASE_URL = "https://moe.mohkg1017.pro/";
-
-// Feather repo lookup URL
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
-
-// Folder to download IPAs to
 const IPA_DIR = path.resolve(__dirname, "ipas");
 
 // Convert size string like "250 MB" or "1.2 GB" to bytes
@@ -34,36 +31,73 @@ function decodeHtmlEntities(str) {
   return str.replace(/&amp;/g, "&");
 }
 
-// Convert Google Drive link to download link (we still download manually)
+// Convert Google Drive URL to direct download link if possible
 function googleDriveDirectLink(url) {
   if (!url) return url;
   url = decodeHtmlEntities(url);
+  const match = url.match(/(?:drive\.google\.com\/file\/d\/|id=)([\w-]+)/);
+  if (match) {
+    const fileId = match[1];
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
   return url;
 }
 
-// Download file from URL to target path
-function downloadFile(url, targetPath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(targetPath);
-    https.get(url, (res) => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`Failed to download ${url}: ${res.statusCode}`));
-        return;
-      }
-      res.pipe(file);
-      file.on("finish", () => {
-        file.close(resolve);
+// Download file with retries and Google Drive confirmation handling
+async function downloadFile(url, targetPath, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(targetPath);
+        https.get(url, (res) => {
+          // Handle Google Drive large file confirmation
+          if (res.headers["content-disposition"]?.includes("attachment")) {
+            res.pipe(file);
+          } else if (res.statusCode === 200) {
+            // Might be the confirmation page
+            let body = "";
+            res.on("data", (chunk) => (body += chunk));
+            res.on("end", async () => {
+              const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&/);
+              if (confirmMatch) {
+                const confirmCode = confirmMatch[1];
+                const u = new URL(url);
+                u.searchParams.set("confirm", confirmCode);
+                try {
+                  await downloadFile(u.toString(), targetPath, 1); // recursive single retry
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              } else {
+                reject(new Error("Unexpected response, not a file"));
+              }
+            });
+            return;
+          } else if (res.statusCode !== 200) {
+            reject(new Error(`Failed with status ${res.statusCode}`));
+            return;
+          }
+
+          res.pipe(file);
+          file.on("finish", () => file.close(resolve));
+        }).on("error", (err) => {
+          fs.unlink(targetPath, () => {});
+          reject(err);
+        });
       });
-    }).on("error", (err) => {
-      fs.unlink(targetPath, () => {});
-      reject(err);
-    });
-  });
+
+      return; // Success, exit retry loop
+    } catch (err) {
+      console.warn(`Attempt ${attempt} failed for ${url}: ${err.message}`);
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+    }
+  }
 }
 
 async function scrape() {
   try {
-    // Ensure IPA directory exists
     if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
 
     // 1️⃣ Fetch Moe site
@@ -81,9 +115,10 @@ async function scrape() {
     }
 
     const apps = [];
-
-    // 3️⃣ Scrape Moe's apps
     const appCards = $(".app-card").toArray();
+
+    const limit = pLimit(3); // Max 3 simultaneous downloads
+    const downloadPromises = [];
 
     for (const el of appCards) {
       const name = $(el).data("name")?.toString().trim() || "Unknown App";
@@ -97,25 +132,25 @@ async function scrape() {
       let downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
       downloadURL = googleDriveDirectLink(downloadURL);
 
-      // Lookup bundleIdentifier & iconURL
       const lookup = lookupMap[name.toLowerCase()] || {};
       const bundleIdentifier = lookup.bundleIdentifier || `com.moes.${name.toLowerCase().replace(/[^a-z0-9]/gi, "")}`;
       const iconURL = lookup.iconURL || `${BASE_URL}${$(el).find(".app-icon img").attr("src")?.replace(/^\//, "") || "placeholder.png"}`;
-
       const description = $(el).find(".app-description").text().trim() || "No description provided.";
 
-      // Save IPA locally
       const safeName = name.replace(/[^a-z0-9\-_.]/gi, "_");
       const ipaPath = path.join(IPA_DIR, `${safeName}.ipa`);
-      try {
-        console.log(`Downloading ${name} from ${downloadURL}...`);
-        await downloadFile(downloadURL, ipaPath);
-        console.log(`Downloaded to ${ipaPath}`);
-      } catch (err) {
-        console.warn(`Failed to download ${name}: ${err.message}`);
-      }
 
-      // Set downloadURL for GitHub Releases (Action will upload)
+      // Queue the download
+      downloadPromises.push(limit(async () => {
+        try {
+          console.log(`Downloading ${name}...`);
+          await downloadFile(downloadURL, ipaPath);
+          console.log(`Downloaded ${name} to ${ipaPath}`);
+        } catch (err) {
+          console.warn(`Failed to download ${name}: ${err.message}`);
+        }
+      }));
+
       const ghDownloadURL = `https://github.com/<USERNAME>/<REPO>/releases/download/<TAG>/${safeName}.ipa`;
 
       apps.push({
@@ -131,7 +166,8 @@ async function scrape() {
       });
     }
 
-    // 4️⃣ Write Feather JSON
+    await Promise.all(downloadPromises); // Wait for all downloads
+
     const repo = {
       name: "Moes IPA Mirror",
       identifier: "com.dwojc6.moesipamirror",
