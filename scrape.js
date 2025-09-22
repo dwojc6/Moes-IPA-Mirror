@@ -161,7 +161,7 @@ async function scrape() {
         }
       });
 
-      const ghDownloadURL = `https://github.com/<USERNAME>/<REPO>/releases/download/<TAG>/${safeName}.ipa`;
+      const ghDownloadURL = `https://github.com/dwojc6/Moes-IPA-Mirror/releases/latest/download/${safeName}.ipa`;
 
       apps.push({
         name,
