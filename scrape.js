@@ -4,11 +4,21 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { URL } = require("url");
-const pLimit = require("p-limit");
 
+// Base URL for Moe's site
 const BASE_URL = "https://moe.mohkg1017.pro/";
+
+// Feather repo lookup URL
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
+
+// Folder to download IPAs to
 const IPA_DIR = path.resolve(__dirname, "ipas");
+
+// Max concurrent downloads
+const MAX_CONCURRENT = 3;
+
+// Max retries per file
+const MAX_RETRIES = 3;
 
 // Convert size string like "250 MB" or "1.2 GB" to bytes
 function sizeToBytes(sizeStr) {
@@ -31,73 +41,96 @@ function decodeHtmlEntities(str) {
   return str.replace(/&amp;/g, "&");
 }
 
-// Convert Google Drive URL to direct download link if possible
+// Convert Google Drive link to direct download if needed
 function googleDriveDirectLink(url) {
   if (!url) return url;
   url = decodeHtmlEntities(url);
-  const match = url.match(/(?:drive\.google\.com\/file\/d\/|id=)([\w-]+)/);
-  if (match) {
-    const fileId = match[1];
+
+  const driveMatch = url.match(/https:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)\//);
+  if (driveMatch) {
+    const fileId = driveMatch[1];
     return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
   return url;
 }
 
-// Download file with retries and Google Drive confirmation handling
-async function downloadFile(url, targetPath, retries = 3) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      await new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(targetPath);
-        https.get(url, (res) => {
-          // Handle Google Drive large file confirmation
-          if (res.headers["content-disposition"]?.includes("attachment")) {
-            res.pipe(file);
-          } else if (res.statusCode === 200) {
-            // Might be the confirmation page
-            let body = "";
-            res.on("data", (chunk) => (body += chunk));
-            res.on("end", async () => {
-              const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&/);
-              if (confirmMatch) {
-                const confirmCode = confirmMatch[1];
-                const u = new URL(url);
-                u.searchParams.set("confirm", confirmCode);
-                try {
-                  await downloadFile(u.toString(), targetPath, 1); // recursive single retry
-                  resolve();
-                } catch (err) {
-                  reject(err);
-                }
-              } else {
-                reject(new Error("Unexpected response, not a file"));
-              }
-            });
-            return;
-          } else if (res.statusCode !== 200) {
-            reject(new Error(`Failed with status ${res.statusCode}`));
-            return;
-          }
+// Semaphore queue for limiting concurrency
+let active = 0;
+const queue = [];
 
-          res.pipe(file);
-          file.on("finish", () => file.close(resolve));
-        }).on("error", (err) => {
-          fs.unlink(targetPath, () => {});
-          reject(err);
-        });
+function enqueue(task) {
+  return new Promise((resolve, reject) => {
+    queue.push({ task, resolve, reject });
+    next();
+  });
+}
+
+function next() {
+  if (active >= MAX_CONCURRENT || queue.length === 0) return;
+  const { task, resolve, reject } = queue.shift();
+  active++;
+  task()
+    .then(resolve)
+    .catch(reject)
+    .finally(() => {
+      active--;
+      next();
+    });
+}
+
+// Download file with retries and Google Drive handling
+async function downloadFile(url, targetPath, retries = 0) {
+  try {
+    const file = fs.createWriteStream(targetPath);
+
+    await new Promise((resolve, reject) => {
+      https.get(url, async (res) => {
+        // Handle Google Drive "large file" warning
+        if (res.headers["content-type"]?.includes("text/html")) {
+          let body = "";
+          res.on("data", (chunk) => body += chunk.toString());
+          res.on("end", async () => {
+            const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&/);
+            if (confirmMatch) {
+              const confirmToken = confirmMatch[1];
+              const u = new URL(url);
+              u.searchParams.set("confirm", confirmToken);
+              await downloadFile(u.toString(), targetPath);
+              resolve();
+              return;
+            } else {
+              reject(new Error("Google Drive file requires manual confirmation"));
+            }
+          });
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          reject(new Error(`Failed to download ${url}: ${res.statusCode}`));
+          return;
+        }
+
+        res.pipe(file);
+        file.on("finish", () => file.close(resolve));
+      }).on("error", (err) => {
+        fs.unlink(targetPath, () => {});
+        reject(err);
       });
+    });
 
-      return; // Success, exit retry loop
-    } catch (err) {
-      console.warn(`Attempt ${attempt} failed for ${url}: ${err.message}`);
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+  } catch (err) {
+    if (retries < MAX_RETRIES) {
+      console.warn(`Retrying download for ${url} (${retries + 1}/${MAX_RETRIES})`);
+      return downloadFile(url, targetPath, retries + 1);
+    } else {
+      throw err;
     }
   }
 }
 
 async function scrape() {
   try {
+    // Ensure IPA directory exists
     if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
 
     // 1️⃣ Fetch Moe site
@@ -115,9 +148,10 @@ async function scrape() {
     }
 
     const apps = [];
+
+    // 3️⃣ Scrape Moe's apps
     const appCards = $(".app-card").toArray();
 
-    const limit = pLimit(3); // Max 3 simultaneous downloads
     const downloadPromises = [];
 
     for (const el of appCards) {
@@ -132,16 +166,18 @@ async function scrape() {
       let downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
       downloadURL = googleDriveDirectLink(downloadURL);
 
+      // Lookup bundleIdentifier & iconURL
       const lookup = lookupMap[name.toLowerCase()] || {};
       const bundleIdentifier = lookup.bundleIdentifier || `com.moes.${name.toLowerCase().replace(/[^a-z0-9]/gi, "")}`;
       const iconURL = lookup.iconURL || `${BASE_URL}${$(el).find(".app-icon img").attr("src")?.replace(/^\//, "") || "placeholder.png"}`;
+
       const description = $(el).find(".app-description").text().trim() || "No description provided.";
 
+      // Save IPA locally
       const safeName = name.replace(/[^a-z0-9\-_.]/gi, "_");
       const ipaPath = path.join(IPA_DIR, `${safeName}.ipa`);
 
-      // Queue the download
-      downloadPromises.push(limit(async () => {
+      downloadPromises.push(enqueue(async () => {
         try {
           console.log(`Downloading ${name}...`);
           await downloadFile(downloadURL, ipaPath);
@@ -151,6 +187,7 @@ async function scrape() {
         }
       }));
 
+      // Set downloadURL for GitHub Releases (Action will upload)
       const ghDownloadURL = `https://github.com/<USERNAME>/<REPO>/releases/download/<TAG>/${safeName}.ipa`;
 
       apps.push({
@@ -166,8 +203,10 @@ async function scrape() {
       });
     }
 
-    await Promise.all(downloadPromises); // Wait for all downloads
+    // Wait for all downloads
+    await Promise.all(downloadPromises);
 
+    // 4️⃣ Write Feather JSON
     const repo = {
       name: "Moes IPA Mirror",
       identifier: "com.dwojc6.moesipamirror",
