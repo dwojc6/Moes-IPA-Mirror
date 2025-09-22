@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const cheerio = require("cheerio");
-const gdown = require("gdown");
+const { spawn } = require("child_process");
 
 // --- CONFIG ---
 const BASE_URL = "https://moe.mohkg1017.pro/";
@@ -41,17 +41,26 @@ function googleDriveDirectLink(url) {
 }
 
 // --- GDOWN DOWNLOAD ---
-async function downloadGDrive(url, outputPath) {
-  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-    console.log(`Skipping already downloaded: ${path.basename(outputPath)}`);
-    return;
-  }
-
+function downloadGDrive(url, outputPath) {
   return new Promise((resolve, reject) => {
-    gdown(url, outputPath, (err) => {
-      if (err) return reject(err);
-      console.log(`✅ Downloaded ${path.basename(outputPath)}`);
-      resolve();
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+      console.log(`Skipping already downloaded: ${path.basename(outputPath)}`);
+      return resolve();
+    }
+
+    console.log(`Downloading ${path.basename(outputPath)} via gdown...`);
+    const gdownProcess = spawn("python3", ["-m", "gdown", url, "-O", outputPath]);
+
+    gdownProcess.stdout.on("data", (data) => process.stdout.write(data.toString()));
+    gdownProcess.stderr.on("data", (data) => process.stderr.write(data.toString()));
+
+    gdownProcess.on("close", (code) => {
+      if (code === 0) {
+        console.log(`✅ Downloaded ${path.basename(outputPath)}`);
+        resolve();
+      } else {
+        reject(new Error(`gdown exited with code ${code}`));
+      }
     });
   });
 }
@@ -81,11 +90,9 @@ async function scrape() {
     if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
     let failedDownloads = [];
 
-    // Fetch Moe site
     const { data: html } = await axios.get(BASE_URL);
     const $ = cheerio.load(html);
 
-    // Fetch Feather repo lookup
     const { data: featherRepo } = await axios.get(LOOKUP_URL);
     const lookupMap = {};
     for (const app of featherRepo.apps) {
@@ -126,7 +133,6 @@ async function scrape() {
 
     await parallelLimit(appsToDownload, MAX_PARALLEL, async (app) => {
       try {
-        console.log(`Downloading ${app.name} via gdown...`);
         await downloadGDrive(app.downloadURL, app.ipaPath);
 
         apps.push({
