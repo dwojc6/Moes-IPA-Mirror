@@ -2,7 +2,6 @@
 
 /**
  * Scrape Moe IPA site -> download IPAs via gdown -> generate repo.feather.json
- * Author: Slowie (rewritten)
  */
 
 const axios = require("axios");
@@ -11,13 +10,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-const BASE_URL = "https://moe.mohkg1017.pro/all-apps";
+const BASE_URL = "https://moe.mohkg1017.pro/";
 const IPAS_DIR = path.join(__dirname, "ipas");
 const JSON_FILE = path.join(__dirname, "repo.feather.json");
 
 // Ensure ipas directory exists
 if (!fs.existsSync(IPAS_DIR)) {
-  fs.mkdirSync(IPAS_DIR);
+  fs.mkdirSync(IPAS_DIR, { recursive: true });
 }
 
 /**
@@ -43,17 +42,18 @@ function downloadFromGDrive(id, outputPath) {
 }
 
 /**
- * Parse app list from Moe site
+ * Parse app list under #all-apps section
  */
 async function fetchApps() {
-  console.log("🌐 Fetching Moe IPA list...");
+  console.log("🌐 Fetching Moe IPA site...");
   const { data } = await axios.get(BASE_URL);
   const $ = cheerio.load(data);
 
   const apps = [];
-  $(".uk-card").each((i, el) => {
-    const name = $(el).find("h3").text().trim();
-    const link = $(el).find("a[href*='drive.google.com']").attr("href");
+  $("#all-apps").parent().nextAll(".app-card").each((i, el) => {
+    const name = $(el).data("name")?.trim() || $(el).find("h3").text().trim();
+    const link = $(el).find("a.app-action.primary").attr("href");
+
     if (!link) return;
 
     // Extract Google Drive file ID
@@ -61,8 +61,14 @@ async function fetchApps() {
     if (!match) return;
 
     const id = match[0];
-    const fileName = name.replace(/\s+/g, "_") + ".ipa";
-    apps.push({ name, id, fileName });
+    const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".ipa";
+
+    apps.push({
+      name,
+      id,
+      fileName: safeName,
+      description: $(el).find(".app-description").text().trim(),
+    });
   });
 
   console.log(`📦 Found ${apps.length} apps`);
@@ -90,11 +96,13 @@ async function fetchApps() {
         // Feather repo entry
         results.push({
           name: app.name,
-          bundleIdentifier: "", // optional: can extract later if needed
+          bundleIdentifier: "", // optional: extract later from Info.plist
           developerName: "Moe IPA",
           version: "",
+          versionDate: new Date().toISOString().split("T")[0],
+          localizedDescription: app.description || "No description",
           downloadURL: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/latest/${app.fileName}`,
-          iconURL: "", // can be added later if you want
+          iconURL: "", // can extract later if needed
         });
       } catch (err) {
         console.error(`❌ Failed ${app.name}: ${err.message}`);
@@ -102,7 +110,19 @@ async function fetchApps() {
     }
 
     // Write Feather repo JSON
-    fs.writeFileSync(JSON_FILE, JSON.stringify(results, null, 2));
+    fs.writeFileSync(
+      JSON_FILE,
+      JSON.stringify(
+        {
+          name: "Moes IPA Mirror",
+          identifier: "com.dwojc6.moesipamirror",
+          apps: results,
+        },
+        null,
+        2
+      )
+    );
+
     console.log(`📄 Wrote ${JSON_FILE} (${results.length} apps)`);
   } catch (err) {
     console.error("❌ Error scraping site:", err);
