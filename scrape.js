@@ -23,9 +23,16 @@ function sizeToBytes(sizeStr) {
   }
 }
 
+// Decode HTML entities in URL
+function decodeHtmlEntities(str) {
+  if (!str) return str;
+  return str.replace(/&amp;/g, "&");
+}
+
 // Convert Google Drive link to direct download
 function googleDriveDirectLink(url) {
   if (!url) return url;
+  url = decodeHtmlEntities(url); // decode first
   const match = url.match(/id=([\w-]+)/);
   if (match) {
     return `https://drive.google.com/uc?export=download&id=${match[1]}`;
