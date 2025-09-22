@@ -1,79 +1,90 @@
-// scrape.js (CommonJS)
-const cheerio = require('cheerio');
-const fs = require('fs/promises');
+const axios = require("axios");
+const cheerio = require("cheerio");
+const fs = require("fs");
 
-const BASE = 'https://moe.mohkg1017.pro';
-const OUT_FILE = 'repo.feather.json';
+// Base URL for Moe's site
+const BASE_URL = "https://moe.mohkg1017.pro/";
 
-function cleanHref(href) {
-  if (!href) return '';
-  // convert &amp; to &, unescape common HTML entities
-  return href.replace(/&amp;/g, '&').trim();
-}
+// URL of the existing Feather repo for bundleId/icon lookup
+const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
 
-async function fetchHTML(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'github-actions/moe-scraper' } });
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  return await res.text();
+// Convert size string like "250 MB" or "1.2 GB" to bytes
+function sizeToBytes(sizeStr) {
+  if (!sizeStr) return 0;
+  const match = sizeStr.trim().match(/([\d.]+)\s*(MB|GB|KB)/i);
+  if (!match) return 0;
+  const value = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  switch (unit) {
+    case "GB": return Math.round(value * 1024 * 1024 * 1024);
+    case "MB": return Math.round(value * 1024 * 1024);
+    case "KB": return Math.round(value * 1024);
+    default: return 0;
+  }
 }
 
 async function scrape() {
-  console.log('Fetching', BASE);
-  const html = await fetchHTML(BASE);
-  const $ = cheerio.load(html);
+  try {
+    // 1️⃣ Fetch Moe's site
+    const { data: html } = await axios.get(BASE_URL);
+    const $ = cheerio.load(html);
 
-  const apps = [];
+    // 2️⃣ Fetch existing Feather repo for lookup
+    const { data: featherRepo } = await axios.get(LOOKUP_URL);
+    const lookupMap = {};
+    for (const app of featherRepo.apps) {
+      lookupMap[app.name.toLowerCase()] = {
+        bundleIdentifier: app.bundleIdentifier,
+        iconURL: app.iconURL
+      };
+    }
 
-  $('.app-card').each((i, el) => {
-    const $el = $(el);
-    // prefer data-name if present
-    const name = ($el.attr('data-name') || $el.find('h3').text() || '').trim();
-    const description = ($el.find('.app-description').text() || '').trim();
-    const versionText = ($el.find('.app-meta-row span').first().text() || '').trim();
-    const version = versionText.replace(/^v/i, '').trim();
-    let icon = $el.find('.app-icon img').attr('src') || '';
-    if (icon && icon.startsWith('/')) icon = BASE + icon;
-    const downloadAnchor = $el.find('a').filter((i, a) => $(a).text().toLowerCase().includes('download')).first();
-    const downloadURL = cleanHref(downloadAnchor.attr('href') || '');
+    const apps = [];
 
-    // Ensure absolute URLs for Drive links and fix relative ones
-    let finalDownload = downloadURL;
-    if (finalDownload && finalDownload.startsWith('/')) finalDownload = BASE + finalDownload;
+    // 3️⃣ Scrape Moe's apps
+    $(".app-card").each((_, el) => {
+      const name = $(el).data("name")?.toString().trim() || "Unknown App";
+      const versionDate = $(el).data("updated")?.toString().trim() || new Date().toISOString().split("T")[0];
 
-    if (name && finalDownload) {
+      const metaSpans = $(el).find(".app-meta-row span");
+      const version = metaSpans.eq(0).text().trim().replace(/^v/i, "") || "0.0.0";
+      const sizeStr = metaSpans.eq(1).text().trim() || "";
+      const size = sizeToBytes(sizeStr);
+
+      const downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
+
+      // Lookup bundleIdentifier & iconURL from existing repo
+      const lookup = lookupMap[name.toLowerCase()] || {};
+      const bundleIdentifier = lookup.bundleIdentifier || `com.moes.${name.toLowerCase().replace(/[^a-z0-9]/gi, "")}`;
+      const iconURL = lookup.iconURL || `${BASE_URL}${$(el).find(".app-icon img").attr("src")?.replace(/^\//, "") || "placeholder.png"}`;
+
+      const description = $(el).find(".app-description").text().trim() || "No description provided.";
+
       apps.push({
         name,
-        description,
-        version: version || '',
-        icon: icon || '',
-        downloadURL: finalDownload
+        bundleIdentifier,
+        developerName: "Unknown",
+        version,
+        versionDate,
+        localizedDescription: description,
+        iconURL,
+        downloadURL,
+        size
       });
-    }
-  });
+    });
 
-  // optional: dedupe by downloadURL
-  const seen = new Set();
-  const uniqueApps = apps.filter(a => {
-    if (seen.has(a.downloadURL)) return false;
-    seen.add(a.downloadURL);
-    return true;
-  });
+    const repo = {
+      name: "Moes IPA Mirror",
+      identifier: "com.dwojc6.moesipamirror",
+      apps
+    };
 
-  // sort by name
-  uniqueApps.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-
-  const repo = {
-    name: "Moe Mirror Repo",
-    updated: new Date().toISOString(),
-    apps: uniqueApps
-  };
-
-  const out = JSON.stringify(repo, null, 2);
-  await fs.writeFile(OUT_FILE, out, 'utf8');
-  console.log(`Wrote ${OUT_FILE} with ${uniqueApps.length} apps`);
+    fs.writeFileSync("repo.feather.json", JSON.stringify(repo, null, 2));
+    console.log(`✅ repo.feather.json generated with ${apps.length} apps`);
+  } catch (err) {
+    console.error("❌ Error scraping site:", err);
+    process.exit(1);
+  }
 }
 
-scrape().catch(err => {
-  console.error('Scrape failed:', err);
-  process.exit(1);
-});
+scrape();
