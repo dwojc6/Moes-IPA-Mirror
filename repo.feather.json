@@ -1,0 +1,292 @@
+{
+  "name": "Moes IPA Mirror",
+  "identifier": "com.dwojc6.moesipamirror",
+  "apps": [
+    {
+      "name": "Appgroupcheck",
+      "bundleIdentifier": "com.moes.appgroupcheck",
+      "developerName": "Unknown",
+      "version": "Latest",
+      "versionDate": "2025-08-25",
+      "localizedDescription": "Appgroupcheck",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/app_app_3_1756145368.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Appgroupcheck.ipa",
+      "size": 47185920
+    },
+    {
+      "name": "Goblin Tools",
+      "bundleIdentifier": "com.moes.goblintools",
+      "developerName": "Unknown",
+      "version": "1.1",
+      "versionDate": "2025-08-25",
+      "localizedDescription": "Goblin Tools",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Goblin Tools_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Goblin_Tools.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Keychain Clean",
+      "bundleIdentifier": "com.moes.keychainclean",
+      "developerName": "Unknown",
+      "version": "1.0",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Keychain Clean",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Keychain_Clean_1756494896.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Keychain_Clean.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "MoeSports",
+      "bundleIdentifier": "com.moes.moesports",
+      "developerName": "Unknown",
+      "version": "2.2",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "MoeSports2.2.ipa",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/MoeSports_1756496131.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/MoeSports.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Vinegar",
+      "bundleIdentifier": "com.moes.vinegar",
+      "developerName": "Unknown",
+      "version": "3.2.3",
+      "versionDate": "2025-08-25",
+      "localizedDescription": "Vinegar",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Vinegar_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Vinegar.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Fusion 0.1.0 Build 123 (Latest from testflight)",
+      "bundleIdentifier": "com.moes.fusion010build123latestfromtestflight",
+      "developerName": "Unknown",
+      "version": "0.1.0-Build 123",
+      "versionDate": "2025-09-04",
+      "localizedDescription": "Fusion 0.1.0 Build 123 (Latest from testflight)",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Fusionapp101_1757012955.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Fusion_0.1.0_Build_123__Latest_from_testflight_.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Stik Debug 2.2.2",
+      "bundleIdentifier": "com.moes.stikdebug222",
+      "developerName": "Unknown",
+      "version": "2.2.2",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Stik Debug 2.2.2",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/StikDebug_1758407170.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Stik_Debug_2.2.2.ipa",
+      "size": 0
+    },
+    {
+      "name": "Theostipsv1.0",
+      "bundleIdentifier": "com.moes.theostipsv10",
+      "developerName": "Unknown",
+      "version": "1.0",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Theostipsv1.0",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Theostipsv1.0_1756497003.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Theostipsv1.0.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "eSign",
+      "bundleIdentifier": "p3.xyz.yyyue.esign",
+      "developerName": "Unknown",
+      "version": "5.0.2",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "eSign",
+      "iconURL": "https://pub.dyld.one/imgs/cry.jpg",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/eSign.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Itorrent",
+      "bundleIdentifier": "com.moes.itorrent",
+      "developerName": "Unknown",
+      "version": "2.0.14",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Itorrent",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Itorrent_1756494959.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Itorrent.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "TFLinks",
+      "bundleIdentifier": "org.TFLinks.app",
+      "developerName": "Unknown",
+      "version": "1.2.2",
+      "versionDate": "2025-09-22",
+      "localizedDescription": "IPA uploaded via Smart Upload: TFLinks",
+      "iconURL": "https://pub.dyld.one/imgs/cry.jpg",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/TFLinks.ipa",
+      "size": 0
+    },
+    {
+      "name": "Postbox",
+      "bundleIdentifier": "com.moes.postbox",
+      "developerName": "Unknown",
+      "version": "0.8.1",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Postbox",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Postbox_1756497031.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Postbox.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Omnicontenthub1.1",
+      "bundleIdentifier": "com.moes.omnicontenthub11",
+      "developerName": "Unknown",
+      "version": "1.1",
+      "versionDate": "2025-09-03",
+      "localizedDescription": "Omnicontenthub1.1 thanks ygb for helping me get the ipa",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Omni_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Omnicontenthub1.1.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Feather",
+      "bundleIdentifier": "com.moes.feather",
+      "developerName": "Unknown",
+      "version": "Latest",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Feather",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Feather_icon.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Feather.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Textastic",
+      "bundleIdentifier": "com.textasticapp.textastic-universal",
+      "developerName": "Unknown",
+      "version": "10.7.5",
+      "versionDate": "2025-09-07",
+      "localizedDescription": "Textastic10.7.5ProMoePatched.ipa",
+      "iconURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/08/b7/7b08b7dc-e676-9751-4412-417c75100c88/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Textastic.ipa",
+      "size": 0
+    },
+    {
+      "name": "Hydra 3.0 Pro",
+      "bundleIdentifier": "com.moes.hydra30pro",
+      "developerName": "Unknown",
+      "version": "3.0.0",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Hydra 3.0 Pro",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Hydra_1758406303.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Hydra_3.0_Pro.ipa",
+      "size": 0
+    },
+    {
+      "name": "Narwhal 2025.7 pro",
+      "bundleIdentifier": "com.moes.narwhal20257pro",
+      "developerName": "Unknown",
+      "version": "2025.7",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Narwhal 2025.7 pro",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Narwhal_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Narwhal_2025.7_pro.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Ksign",
+      "bundleIdentifier": "com.moes.ksign",
+      "developerName": "Unknown",
+      "version": "Latest",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Ksignlatest",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Ksign_1756494976.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Ksign.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Vpn",
+      "bundleIdentifier": "com.moes.vpn",
+      "developerName": "Unknown",
+      "version": "2.2.6",
+      "versionDate": "2025-08-25",
+      "localizedDescription": "Vpn",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Vpn_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Vpn.ipa",
+      "size": 57671680
+    },
+    {
+      "name": "Proshotv9.5.6Promoepatched",
+      "bundleIdentifier": "com.moes.proshotv956promoepatched",
+      "developerName": "Unknown",
+      "version": "9.5.6",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Smart uploaded app: Proshotv9.5.6Promoepatched",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Proshotv9.5.6Promoepatched_1756496394.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Proshotv9.5.6Promoepatched.ipa",
+      "size": 8954839
+    },
+    {
+      "name": "Appcake",
+      "bundleIdentifier": "com.moes.appcake",
+      "developerName": "Unknown",
+      "version": "7.2.2",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "last updated on 8-31-2025 by cielogic",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/app_app_2_1756144173.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Appcake.ipa",
+      "size": 94371840
+    },
+    {
+      "name": "Vpn Superx",
+      "bundleIdentifier": "com.moes.vpnsuperx",
+      "developerName": "Unknown",
+      "version": "1.1",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Vpn Superx",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Vpn Superx_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Vpn_Superx.ipa",
+      "size": 57671680
+    },
+    {
+      "name": "Neoserver 7.9.1 Pro",
+      "bundleIdentifier": "com.moes.neoserver791pro",
+      "developerName": "Unknown",
+      "version": "7.9.1",
+      "versionDate": "2025-09-20",
+      "localizedDescription": "Neoserver 7.9.1 Pro",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/NeoServer_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Neoserver_7.9.1_Pro.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "Thunder Vpn 10",
+      "bundleIdentifier": "com.moes.thundervpn10",
+      "developerName": "Unknown",
+      "version": "10",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Thunder Vpn 10",
+      "iconURL": "https://moe.mohkg1017.pro/uploads/icons/Thunder_Vpn_10_1756496852.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Thunder_Vpn_10.ipa",
+      "size": 57671680
+    },
+    {
+      "name": "Syfer",
+      "bundleIdentifier": "com.moes.syfer",
+      "developerName": "Unknown",
+      "version": "2.0.0",
+      "versionDate": "2025-08-29",
+      "localizedDescription": "Syfer",
+      "iconURL": "https://moe.mohkg1017.pro/static/icons/Syfer_xlarge.png",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/Syfer.ipa",
+      "size": 83886080
+    },
+    {
+      "name": "FreeYourMusic",
+      "bundleIdentifier": "io.stampapp.Stamp",
+      "developerName": "Unknown",
+      "version": "9.13.0",
+      "versionDate": "2025-08-25",
+      "localizedDescription": "No description provided.",
+      "iconURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/08/cb/7e/08cb7e91-6f00-c29b-03c1-d18de79877af/AppIcon-0-0-1x_U007emarketing-0-11-0-85-220.png/512x512bb.jpg",
+      "downloadURL": "https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/FreeYourMusic.ipa",
+      "size": 188743680
+    }
+  ]
+}
