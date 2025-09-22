@@ -50,26 +50,33 @@ async function fetchApps() {
   const $ = cheerio.load(data);
 
   const apps = [];
-  $("#all-apps").parent().nextAll(".app-card").each((i, el) => {
-    const name = $(el).data("name")?.trim() || $(el).find("h3").text().trim();
-    const link = $(el).find("a.app-action.primary").attr("href");
 
-    if (!link) return;
+  // Find the header, then collect following siblings until next section-header
+  let header = $("#all-apps").closest(".section-header");
+  let el = header.next();
 
-    // Extract Google Drive file ID
-    const match = link.match(/[-\w]{25,}/);
-    if (!match) return;
+  while (el.length && !el.is(".section-header")) {
+    if (el.hasClass("app-card")) {
+      const name = el.data("name")?.toString().trim() || el.find("h3").text().trim();
+      const link = el.find("a.app-action.primary").attr("href");
 
-    const id = match[0];
-    const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".ipa";
+      if (link) {
+        const match = link.match(/[-\w]{25,}/);
+        if (match) {
+          const id = match[0];
+          const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".ipa";
 
-    apps.push({
-      name,
-      id,
-      fileName: safeName,
-      description: $(el).find(".app-description").text().trim(),
-    });
-  });
+          apps.push({
+            name,
+            id,
+            fileName: safeName,
+            description: el.find(".app-description").text().trim(),
+          });
+        }
+      }
+    }
+    el = el.next();
+  }
 
   console.log(`📦 Found ${apps.length} apps`);
   return apps;
