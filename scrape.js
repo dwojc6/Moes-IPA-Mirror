@@ -51,32 +51,37 @@ async function fetchApps() {
 
   const apps = [];
 
-  // Find the header, then collect following siblings until next section-header
-  let header = $("#all-apps").closest(".section-header");
-  let el = header.next();
+  // grab all cards after the #all-apps header
+  $("#all-apps").nextAll(".app-card").each((i, el) => {
+    const card = $(el);
 
-  while (el.length && !el.is(".section-header")) {
-    if (el.hasClass("app-card")) {
-      const name = el.data("name")?.toString().trim() || el.find("h3").text().trim();
-      const link = el.find("a.app-action.primary").attr("href");
+    const name =
+      card.data("name")?.toString().trim() ||
+      card.find("h3").text().trim();
 
-      if (link) {
-        const match = link.match(/[-\w]{25,}/);
-        if (match) {
-          const id = match[0];
-          const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".ipa";
+    const desc = card.find(".app-description").text().trim();
 
-          apps.push({
-            name,
-            id,
-            fileName: safeName,
-            description: el.find(".app-description").text().trim(),
-          });
-        }
-      }
-    }
-    el = el.next();
-  }
+    const link = card.find("a.app-action.primary").attr("href");
+
+    if (!link) return;
+
+    // extract google drive id
+    const match = link.match(/[-\w]{25,}/);
+    if (!match) return;
+
+    const id = match[0];
+    const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".ipa";
+
+    apps.push({
+      name,
+      id,
+      fileName: safeName,
+      description: desc,
+      icon: card.find(".app-icon img").attr("src")
+        ? BASE_URL + card.find(".app-icon img").attr("src")
+        : null,
+    });
+  });
 
   console.log(`📦 Found ${apps.length} apps`);
   return apps;
