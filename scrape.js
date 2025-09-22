@@ -5,7 +5,7 @@ const fs = require("fs");
 // Base URL for Moe's site
 const BASE_URL = "https://moe.mohkg1017.pro/";
 
-// URL of the existing Feather repo for bundleId/icon lookup
+// Feather repo lookup URL
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
 
 // Convert size string like "250 MB" or "1.2 GB" to bytes
@@ -23,13 +23,23 @@ function sizeToBytes(sizeStr) {
   }
 }
 
+// Convert Google Drive link to direct download
+function googleDriveDirectLink(url) {
+  if (!url) return url;
+  const match = url.match(/id=([\w-]+)/);
+  if (match) {
+    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+  }
+  return url;
+}
+
 async function scrape() {
   try {
-    // 1️⃣ Fetch Moe's site
+    // 1️⃣ Fetch Moe site
     const { data: html } = await axios.get(BASE_URL);
     const $ = cheerio.load(html);
 
-    // 2️⃣ Fetch existing Feather repo for lookup
+    // 2️⃣ Fetch Feather repo lookup
     const { data: featherRepo } = await axios.get(LOOKUP_URL);
     const lookupMap = {};
     for (const app of featherRepo.apps) {
@@ -51,9 +61,10 @@ async function scrape() {
       const sizeStr = metaSpans.eq(1).text().trim() || "";
       const size = sizeToBytes(sizeStr);
 
-      const downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
+      let downloadURL = $(el).find(".app-actions a.app-action.primary").attr("href") || "";
+      downloadURL = googleDriveDirectLink(downloadURL);
 
-      // Lookup bundleIdentifier & iconURL from existing repo
+      // Lookup bundleIdentifier & iconURL from Feather repo
       const lookup = lookupMap[name.toLowerCase()] || {};
       const bundleIdentifier = lookup.bundleIdentifier || `com.moes.${name.toLowerCase().replace(/[^a-z0-9]/gi, "")}`;
       const iconURL = lookup.iconURL || `${BASE_URL}${$(el).find(".app-icon img").attr("src")?.replace(/^\//, "") || "placeholder.png"}`;
