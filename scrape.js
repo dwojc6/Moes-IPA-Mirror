@@ -42,6 +42,10 @@ function googleDriveDirectLink(url) {
 }
 
 // --- DOWNLOAD ---
+const axiosRetry = require("axios-retry"); // optional, for automatic retries
+
+axiosRetry(axios, { retries: MAX_RETRIES, retryDelay: axiosRetry.exponentialDelay });
+
 async function downloadFile(url, targetPath) {
   if (fs.existsSync(targetPath) && fs.statSync(targetPath).size > 0) {
     console.log(`Skipping already downloaded: ${path.basename(targetPath)}`);
@@ -50,41 +54,62 @@ async function downloadFile(url, targetPath) {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      await new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(targetPath);
-        https.get(url, (res) => {
-          if (res.statusCode === 200 && res.headers["content-type"]?.includes("text/html")) {
-            let body = "";
-            res.on("data", chunk => body += chunk.toString());
-            res.on("end", () => {
-              const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&amp;id=/);
-              if (confirmMatch) {
-                const confirmToken = confirmMatch[1];
-                const newUrl = url.replace("export=download", `export=download&confirm=${confirmToken}`);
-                console.log(`Detected Google Drive confirmation for ${path.basename(targetPath)}, retrying...`);
-                resolve(downloadFile(newUrl, targetPath));
-              } else if (body.includes("quota exceeded")) {
-                reject(new Error("Google Drive quota exceeded"));
-              } else {
-                reject(new Error(`Unexpected HTML response for ${url}`));
-              }
-            });
-            return;
-          }
-
-          if (res.statusCode !== 200) {
-            reject(new Error(`HTTP ${res.statusCode}`));
-            return;
-          }
-
-          res.pipe(file);
-          file.on("finish", () => file.close(resolve));
-        }).on("error", err => {
-          fs.unlink(targetPath, () => {});
-          reject(err);
+      let finalUrl = url;
+      while (true) {
+        const response = await axios({
+          method: "get",
+          url: finalUrl,
+          responseType: "stream",
+          maxRedirects: 10,
+          validateStatus: (status) => true, // we handle non-200 manually
         });
-      });
-      return; // success
+
+        // Handle Google Drive confirm token
+        if (response.status === 200 && response.headers["content-type"]?.includes("text/html")) {
+          let body = "";
+          for await (const chunk of response.data) {
+            body += chunk.toString();
+          }
+
+          const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&amp;id=/);
+          if (confirmMatch) {
+            const confirmToken = confirmMatch[1];
+            finalUrl = finalUrl.replace("export=download", `export=download&confirm=${confirmToken}`);
+            console.log(`Detected Google Drive confirmation for ${path.basename(targetPath)}, retrying...`);
+            continue;
+          } else if (body.includes("quota exceeded")) {
+            throw new Error("Google Drive quota exceeded");
+          } else {
+            throw new Error(`Unexpected HTML response for ${finalUrl}`);
+          }
+        }
+
+        // Follow non-200 redirects (3xx)
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const redirectUrl = response.headers.location;
+          if (!redirectUrl) throw new Error(`Redirect with no location`);
+          finalUrl = redirectUrl;
+          console.log(`Redirected to ${redirectUrl}`);
+          continue;
+        }
+
+        if (response.status !== 200) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        // Stream to file
+        await new Promise((resolve, reject) => {
+          const file = fs.createWriteStream(targetPath);
+          response.data.pipe(file);
+          file.on("finish", () => file.close(resolve));
+          file.on("error", (err) => {
+            fs.unlink(targetPath, () => {});
+            reject(err);
+          });
+        });
+
+        return; // success
+      }
     } catch (err) {
       console.warn(`Retry ${attempt}/${MAX_RETRIES} failed for ${path.basename(targetPath)}: ${err.message}`);
       if (attempt === MAX_RETRIES) throw err;
