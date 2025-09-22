@@ -23,6 +23,9 @@ jobs:
       - name: Run scraper
         run: node scrape.js
 
+      - name: List downloaded IPAs
+        run: ls -l ipas/
+
       # GitHub Releases step
       - name: Create or update release and upload IPAs
         uses: softprops/action-gh-release@v1
