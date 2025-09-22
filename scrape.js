@@ -2,20 +2,22 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
 
-// Base URL for Moe's site
+// Base URLs
 const BASE_URL = "https://moe.mohkg1017.pro/";
-
-// Feather repo lookup URL
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
 
-// Folder to download IPAs to
+// Folder to download IPAs
 const IPA_DIR = path.resolve(__dirname, "ipas");
 
 // Max simultaneous downloads
-const MAX_CONCURRENT = 3;
+const MAX_PARALLEL = 3;
 
-// Convert size string like "250 MB" or "1.2 GB" to bytes
+// Max retries per download
+const MAX_RETRIES = 3;
+
+// Convert size string to bytes
 function sizeToBytes(sizeStr) {
   if (!sizeStr) return 0;
   const match = sizeStr.trim().match(/([\d.]+)\s*(MB|GB|KB)/i);
@@ -36,86 +38,98 @@ function decodeHtmlEntities(str) {
   return str.replace(/&amp;/g, "&");
 }
 
-// Google Drive direct link (returns same URL for now)
+// Extract Google Drive direct download link
 function googleDriveDirectLink(url) {
   if (!url) return url;
-  return decodeHtmlEntities(url);
+  url = decodeHtmlEntities(url);
+
+  // Handle /file/d/ID or ?id=ID formats
+  const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)/);
+  const fileId = fileIdMatch?.[1] || fileIdMatch?.[2];
+  if (!fileId) return url;
+
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
 // Download file with retries and Google Drive handling
-async function downloadFile(url, targetPath, retries = 0) {
-  try {
-    const res = await axios.get(url, {
-      responseType: "stream",
-      maxRedirects: 5,
-      validateStatus: null,
-    });
+async function downloadFile(url, targetPath) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(targetPath);
 
-    // Handle Google Drive large file warning
-    if (res.status === 200 && res.headers["content-type"]?.includes("text/html")) {
-      let body = "";
-      for await (const chunk of res.data) body += chunk.toString();
+        https.get(url, (res) => {
+          // Google Drive large file confirmation page
+          if (res.statusCode === 200 && res.headers["content-type"]?.includes("text/html")) {
+            let body = "";
+            res.on("data", chunk => body += chunk.toString());
+            res.on("end", () => {
+              const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&amp;id=/);
+              if (confirmMatch) {
+                const confirmToken = confirmMatch[1];
+                const newUrl = url.replace("export=download", `export=download&confirm=${confirmToken}`);
+                console.log("Detected Google Drive confirmation, retrying with confirm token...");
+                resolve(downloadFile(newUrl, targetPath));
+              } else if (body.includes("quota exceeded")) {
+                reject(new Error("Google Drive requires manual confirmation or quota exceeded"));
+              } else {
+                reject(new Error(`Unexpected HTML response for ${url}`));
+              }
+            });
+            return;
+          }
 
-      const confirmMatch = body.match(/confirm=([0-9A-Za-z_]+)&/);
-      const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
-      if (confirmMatch && idMatch) {
-        const confirmToken = confirmMatch[1];
-        const fileId = idMatch[1];
-        const newUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=${confirmToken}`;
-        return downloadFile(newUrl, targetPath, retries);
-      }
+          if (res.statusCode !== 200) {
+            reject(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
 
-      throw new Error("Google Drive requires manual confirmation or quota exceeded");
-    }
+          res.pipe(file);
+          file.on("finish", () => {
+            file.close(resolve);
+          });
+        }).on("error", (err) => {
+          fs.unlink(targetPath, () => {});
+          reject(err);
+        });
+      });
 
-    if (res.status !== 200) throw new Error(`Failed to download: HTTP ${res.status}`);
-
-    const writer = fs.createWriteStream(targetPath);
-    res.data.pipe(writer);
-
-    return new Promise((resolve, reject) => {
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-  } catch (err) {
-    if (retries < 3) {
-      console.warn(`Retrying download for ${url} (${retries + 1}/3)`);
-      return downloadFile(url, targetPath, retries + 1);
-    } else {
-      throw err;
+      return; // success
+    } catch (err) {
+      console.warn(`Retrying download for ${url} (${attempt}/${MAX_RETRIES})`);
+      if (attempt === MAX_RETRIES) throw err;
     }
   }
 }
 
-// Helper to run N promises concurrently
-async function runConcurrent(tasks, concurrency = MAX_CONCURRENT) {
+// Utility to run promises in parallel with limit
+async function parallelLimit(items, limit, fn) {
   const results = [];
   const executing = [];
 
-  for (const task of tasks) {
-    const p = task().then(r => results.push(r)).catch(e => results.push(e));
-    executing.push(p);
+  for (const item of items) {
+    const p = fn(item);
+    results.push(p);
 
-    if (executing.length >= concurrency) {
-      await Promise.race(executing);
+    executing.push(p);
+    if (executing.length >= limit) {
+      await Promise.race(executing).catch(() => {});
       executing.splice(executing.findIndex(e => e === p), 1);
     }
   }
 
-  await Promise.all(executing);
-  return results;
+  return Promise.all(results);
 }
 
 async function scrape() {
   try {
     if (!fs.existsSync(IPA_DIR)) fs.mkdirSync(IPA_DIR, { recursive: true });
 
-    // 1️⃣ Fetch Moe site
+    // Fetch Moe site
     const { data: html } = await axios.get(BASE_URL);
     const $ = cheerio.load(html);
 
-    // 2️⃣ Fetch Feather repo lookup
+    // Fetch Feather repo lookup
     const { data: featherRepo } = await axios.get(LOOKUP_URL);
     const lookupMap = {};
     for (const app of featherRepo.apps) {
@@ -125,15 +139,10 @@ async function scrape() {
       };
     }
 
-    const apps = [];
-    const downloadTasks = [];
-
-    // 3️⃣ Scrape Moe's apps
     const appCards = $(".app-card").toArray();
-    for (const el of appCards) {
+    const appsToDownload = appCards.map(el => {
       const name = $(el).data("name")?.toString().trim() || "Unknown App";
       const versionDate = $(el).data("updated")?.toString().trim() || new Date().toISOString().split("T")[0];
-
       const metaSpans = $(el).find(".app-meta-row span");
       const version = metaSpans.eq(0).text().trim().replace(/^v/i, "") || "0.0.0";
       const sizeStr = metaSpans.eq(1).text().trim() || "";
@@ -149,44 +158,47 @@ async function scrape() {
 
       const safeName = name.replace(/[^a-z0-9\-_.]/gi, "_");
       const ipaPath = path.join(IPA_DIR, `${safeName}.ipa`);
+      const ghDownloadURL = `https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/${safeName}.ipa`;
 
-      // Add download task
-      downloadTasks.push(async () => {
-        console.log(`Downloading ${name}...`);
-        try {
-          await downloadFile(downloadURL, ipaPath);
-          console.log(`Downloaded ${name} to ${ipaPath}`);
-        } catch (err) {
-          console.warn(`Failed to download ${name}: ${err.message}`);
-        }
-      });
+      return {
+        name, bundleIdentifier, version, versionDate,
+        iconURL, description, downloadURL, ipaPath, ghDownloadURL, size
+      };
+    });
 
-      const ghDownloadURL = `https://github.com/dwojc6/Moes-IPA-Mirror/releases/latest/download/${safeName}.ipa`;
+    const apps = [];
+    const failedDownloads = [];
 
-      apps.push({
-        name,
-        bundleIdentifier,
-        developerName: "Unknown",
-        version,
-        versionDate,
-        localizedDescription: description,
-        iconURL,
-        downloadURL: ghDownloadURL,
-        size
-      });
+    await parallelLimit(appsToDownload, MAX_PARALLEL, async (app) => {
+      try {
+        console.log(`Downloading ${app.name}...`);
+        await downloadFile(app.downloadURL, app.ipaPath);
+        console.log(`✅ Downloaded ${app.name}`);
+
+        apps.push({
+          name: app.name,
+          bundleIdentifier: app.bundleIdentifier,
+          developerName: "Unknown",
+          version: app.version,
+          versionDate: app.versionDate,
+          localizedDescription: app.description,
+          iconURL: app.iconURL,
+          downloadURL: app.ghDownloadURL,
+          size: app.size
+        });
+      } catch (err) {
+        console.warn(`❌ Failed to download ${app.name}: ${err.message}`);
+        failedDownloads.push({ name: app.name, url: app.downloadURL });
+      }
+    });
+
+    fs.writeFileSync("repo.feather.json", JSON.stringify({ name: "Moes IPA Mirror", identifier: "com.dwojc6.moesipamirror", apps }, null, 2));
+
+    if (failedDownloads.length > 0) {
+      fs.writeFileSync("failedDownloads.json", JSON.stringify(failedDownloads, null, 2));
+      console.log(`⚠️ Some downloads failed. See failedDownloads.json`);
     }
 
-    // Run downloads concurrently
-    await runConcurrent(downloadTasks, MAX_CONCURRENT);
-
-    // 4️⃣ Write Feather JSON
-    const repo = {
-      name: "Moes IPA Mirror",
-      identifier: "com.dwojc6.moesipamirror",
-      apps
-    };
-
-    fs.writeFileSync("repo.feather.json", JSON.stringify(repo, null, 2));
     console.log(`✅ repo.feather.json generated with ${apps.length} apps`);
   } catch (err) {
     console.error("❌ Error scraping site:", err);
