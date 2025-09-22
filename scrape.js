@@ -1,17 +1,14 @@
-const cheerio = require("cheerio");
 const fs = require("fs");
 const path = require("path");
-const { execFile } = require("child_process");
-const util = require("util");
-const execFileAsync = util.promisify(execFile);
-
 const axios = require("axios");
+const cheerio = require("cheerio");
+const gdown = require("gdown");
 
 // --- CONFIG ---
 const BASE_URL = "https://moe.mohkg1017.pro/";
 const LOOKUP_URL = "https://aio.zxcvbn.fyi/r/repo.feather.json";
 const IPA_DIR = path.resolve(__dirname, "ipas");
-const MAX_PARALLEL = 5; // concurrency
+const MAX_PARALLEL = 5;
 const FAILED_LOG = path.resolve(__dirname, "failedDownloads.json");
 
 // --- UTILS ---
@@ -40,24 +37,23 @@ function googleDriveDirectLink(url) {
   const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)/);
   const fileId = fileIdMatch?.[1] || fileIdMatch?.[2];
   if (!fileId) return url;
-  return `https://drive.google.com/uc?id=${fileId}`;
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
 // --- GDOWN DOWNLOAD ---
-async function downloadWithGdown(url, targetPath) {
-  if (fs.existsSync(targetPath) && fs.statSync(targetPath).size > 0) {
-    console.log(`Skipping already downloaded: ${path.basename(targetPath)}`);
+async function downloadGDrive(url, outputPath) {
+  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+    console.log(`Skipping already downloaded: ${path.basename(outputPath)}`);
     return;
   }
 
-  try {
-    console.log(`Downloading ${path.basename(targetPath)} via gdown...`);
-    await execFileAsync("npx", ["gdown", url, "-O", targetPath]);
-    console.log(`✅ Downloaded ${path.basename(targetPath)}`);
-  } catch (err) {
-    console.warn(`❌ Failed to download ${path.basename(targetPath)}: ${err.message}`);
-    throw err;
-  }
+  return new Promise((resolve, reject) => {
+    gdown(url, outputPath, (err) => {
+      if (err) return reject(err);
+      console.log(`✅ Downloaded ${path.basename(outputPath)}`);
+      resolve();
+    });
+  });
 }
 
 // --- PARALLEL LIMIT ---
@@ -66,12 +62,12 @@ async function parallelLimit(items, limit, fn) {
   const executing = [];
 
   for (const item of items) {
-    const p = fn(item).catch(err => ({ error: err, item }));
+    const p = fn(item);
     results.push(p);
     executing.push(p);
 
     if (executing.length >= limit) {
-      await Promise.race(executing);
+      await Promise.race(executing).catch(() => {});
       executing.splice(executing.findIndex(e => e === p), 1);
     }
   }
@@ -120,34 +116,41 @@ async function scrape() {
       const ipaPath = path.join(IPA_DIR, `${safeName}.ipa`);
       const ghDownloadURL = `https://github.com/dwojc6/Moes-IPA-Mirror/releases/download/latest/${safeName}.ipa`;
 
-      return { name, bundleIdentifier, version, versionDate, iconURL, description, downloadURL, ipaPath, ghDownloadURL, size };
+      return {
+        name, bundleIdentifier, version, versionDate,
+        iconURL, description, downloadURL, ipaPath, ghDownloadURL, size
+      };
     });
 
-    // Download all IPAs first
+    const apps = [];
+
     await parallelLimit(appsToDownload, MAX_PARALLEL, async (app) => {
       try {
-        await downloadWithGdown(app.downloadURL, app.ipaPath);
-      } catch {
+        console.log(`Downloading ${app.name} via gdown...`);
+        await downloadGDrive(app.downloadURL, app.ipaPath);
+
+        apps.push({
+          name: app.name,
+          bundleIdentifier: app.bundleIdentifier,
+          developerName: "Unknown",
+          version: app.version,
+          versionDate: app.versionDate,
+          localizedDescription: app.description,
+          iconURL: app.iconURL,
+          downloadURL: app.ghDownloadURL,
+          size: app.size
+        });
+      } catch (err) {
+        console.warn(`❌ Failed to download ${app.name}: ${err.message}`);
         failedDownloads.push({ name: app.name, url: app.downloadURL });
       }
     });
 
-    // Generate JSON after downloads
-    const apps = appsToDownload
-      .filter(app => fs.existsSync(app.ipaPath))
-      .map(app => ({
-        name: app.name,
-        bundleIdentifier: app.bundleIdentifier,
-        developerName: "Unknown",
-        version: app.version,
-        versionDate: app.versionDate,
-        localizedDescription: app.description,
-        iconURL: app.iconURL,
-        downloadURL: app.ghDownloadURL,
-        size: app.size
-      }));
-
-    fs.writeFileSync("repo.feather.json", JSON.stringify({ name: "Moes IPA Mirror", identifier: "com.dwojc6.moesipamirror", apps }, null, 2));
+    fs.writeFileSync("repo.feather.json", JSON.stringify({
+      name: "Moes IPA Mirror",
+      identifier: "com.dwojc6.moesipamirror",
+      apps
+    }, null, 2));
 
     if (failedDownloads.length > 0) {
       fs.writeFileSync(FAILED_LOG, JSON.stringify(failedDownloads, null, 2));
